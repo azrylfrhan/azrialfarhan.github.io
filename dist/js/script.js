@@ -69,29 +69,12 @@ window.onscroll = function(){
     //close object
     const closeBtn = document.querySelector('.close-btn');
     const closeAlert = document.querySelector('.close-alert');
-    const closeModal = document.querySelector('.modal-close');
-    const modalClose = document.querySelector('.close-modal');
-    const modalCloseButton = document.querySelector('.close-modal-button');
 
     closeBtn.addEventListener('click', function() {
         closeAlert.classList.toggle('hidden');
     });
 
-    modalCloseButton.addEventListener('click', function() {
-        modalClose.classList.toggle('hidden');
-    });
-
-    closeModal.addEventListener('click', function() {
-        modalClose.classList.toggle('hidden');
-    });
-
     //modal open
-    const modalOpen = document.querySelector('#open-modal');
-    const modalOn = document.querySelector('#modal-on');
-    modalOn.addEventListener('click', function() {
-        modalOpen.classList.toggle('hidden');
-
-    });
 
 
 
