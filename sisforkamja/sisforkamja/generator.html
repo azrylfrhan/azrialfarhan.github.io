@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alat Generator Data Permohonan Surat (SQL)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .pagination-btn.active { background-color: #3B82F6; color: white; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <i class="fas fa-database fa-3x text-green-500 mb-2"></i>
+            <h1 class="text-3xl font-bold text-gray-800">Alat Generator Data Latih (SQL)</h1>
+            <p class="text-gray-600 mt-2">Buat perintah SQL INSERT untuk mengisi data permohonan surat secara massal.</p>
+        </div>
+
+        <!-- Panel Kontrol -->
+        <div class="bg-white p-6 rounded-lg shadow-lg mb-6 border border-gray-200">
+            <div class="grid md:grid-cols-5 gap-6 items-end">
+                <div>
+                    <label for="numRows" class="block text-sm font-medium text-gray-700 mb-1">Total Data</label>
+                    <input type="number" id="numRows" value="300" class="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500">
+                </div>
+                <div>
+                    <label for="chunkSize" class="block text-sm font-medium text-gray-700 mb-1">Data per Halaman</label>
+                    <input type="number" id="chunkSize" value="100" class="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500">
+                </div>
+                <div>
+                    <label for="minPendudukId" class="block text-sm font-medium text-gray-700 mb-1">Min Penduduk ID</label>
+                    <input type="number" id="minPendudukId" value="1" class="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500">
+                </div>
+                <div>
+                    <label for="maxPendudukId" class="block text-sm font-medium text-gray-700 mb-1">Max Penduduk ID</label>
+                    <input type="number" id="maxPendudukId" value="10" class="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500">
+                </div>
+                
+                <div class="flex space-x-3">
+                    <button id="generateBtn" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200">
+                        <i class="fas fa-cogs mr-2"></i>Generate
+                    </button>
+                    <button id="copyBtn" class="w-full bg-gray-600 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200" disabled>
+                        <i class="fas fa-copy mr-2"></i>Salin
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Area Hasil -->
+        <div class="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
+            <div class="flex justify-between items-center mb-2">
+                 <h2 class="text-xl font-semibold">Hasil (Perintah SQL INSERT)</h2>
+                 <div id="pagination-controls" class="flex space-x-1"></div>
+            </div>
+            <p id="copyMessage" class="text-sm text-green-600 h-5 mb-2"></p>
+            <textarea id="output" class="w-full h-96 p-4 border border-gray-300 rounded-md bg-gray-900 text-green-400 font-mono text-sm" readonly placeholder="Hasil perintah SQL akan muncul di sini..."></textarea>
+        </div>
+        
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const generateBtn = document.getElementById('generateBtn');
+            const copyBtn = document.getElementById('copyBtn');
+            const outputTextarea = document.getElementById('output');
+            const numRowsInput = document.getElementById('numRows');
+            const chunkSizeInput = document.getElementById('chunkSize');
+            const minPendudukIdInput = document.getElementById('minPendudukId');
+            const maxPendudukIdInput = document.getElementById('maxPendudukId');
+            const paginationControls = document.getElementById('pagination-controls');
+            const copyMessage = document.getElementById('copyMessage');
+
+            let allSqlStatements = [];
+
+            const jenisSuratOptions = [
+                { id: 1, nama: 'Surat Keterangan Tidak Mampu', kode: 'SKTM', custom_fields: [ {name: "keperluan", label: "Digunakan untuk Keperluan"} ] },
+                { id: 3, nama: 'Surat Keterangan Domisili', kode: 'SKD', custom_fields: [] },
+                { id: 4, nama: 'Surat Keterangan Usaha', kode: 'SKU', custom_fields: [ {name: "nama_usaha", label: "Nama Usaha"}, {name: "jenis_usaha", label: "Jenis Usaha"}, {name: "alamat_usaha", label: "Alamat Lengkap Usaha"}, {name: "keperluan", label: "Keperluan Surat"} ]},
+                { id: 5, nama: 'Surat Berkelakuan Baik', kode: 'SKBB', custom_fields: [] },
+                { id: 6, nama: 'Surat Keterangan Kematian', kode: 'SKK', custom_fields: [ {name: "tanggal_meninggal", label: "Tanggal Meninggal"}, {name: "tempat_meninggal", label: "Meninggal di"}, {name: "penyebab_kematian", label: "Penyebab Kematian"}, {name: "nama_pelapor", label: "Nama Lengkap Pelapor"}, {name: "hubungan_pelapor", label: "Hubungan dengan Almarhum/ah"} ]},
+                { id: 7, nama: 'Surat Keterangan Ahli Waris', kode: 'SKAW', custom_fields: [ {name: "nama_pewaris", label: "Nama Lengkap Pewaris (Almarhum/ah)"}, {name: "nik_pewaris", label: "NIK Pewaris (Almarhum/ah)"}, {name: "tanggal_kematian_pewaris", label: "Tanggal Kematian Pewaris"}, {name: "daftar_ahli_waris", label: "Daftar Ahli Waris (Nama & Hubungan)"}, {name: "keperluan", label: "Digunakan untuk Keperluan"} ]},
+                { id: 8, nama: 'Surat Keterangan Riwayat Tanah', kode: 'SKRT', custom_fields: [ {name: "lokasi_tanah", label: "Lokasi Tanah (Jalan/Lingkungan)"}, {name: "luas_tanah", label: "Luas Tanah (dalam meter persegi)"}, {name: "batas_utara", label: "Batas Sebelah Utara"}, {name: "batas_timur", label: "Batas Sebelah Timur"}, {name: "batas_selatan", label: "Batas Sebelah Selatan"}, {name: "batas_barat", label: "Batas Sebelah Barat"}, {name: "riwayat_kepemilikan", label: "Riwayat Singkat Kepemilikan Tanah"}, {name: "keperluan", label: "Digunakan untuk Keperluan"} ]},
+                { id: 9, nama: 'Surat Pengantar Umum', kode: 'SPU', custom_fields: [ {name: "keperluan_pengantar", label: "Digunakan untuk Keperluan"} ] }
+            ];
+            const alasanDitolak = [ "Data KTP tidak sesuai.", "Dokumen pendukung tidak lengkap.", "Permohonan tidak jelas.", "Salah memilih jenis surat." ];
+            const keperluanOptions = [ "Pengajuan Beasiswa", "Administrasi Bank", "Melamar Pekerjaan", "Persyaratan Sekolah" ];
+            const namaUsahaOptions = [ "Toko Kelontong Berkah", "Warung Makan Sejahtera", "Bengkel Maju Jaya", "Jasa Laundry Bersih" ];
+            const jenisUsahaOptions = [ "Perdagangan", "Kuliner", "Jasa Otomotif", "Jasa Kebersihan" ];
+
+            const getRandomInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+            const getRandomElement = (arr) => arr[Math.floor(Math.random() * arr.length)];
+            const randomDate = (start, end) => new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()));
+            const escapeSql = (str) => str.replace(/'/g, "''");
+
+            // ===================================================================
+            // === PERBAIKAN: Menggunakan algoritma Fisher-Yates untuk pengacakan yang benar ===
+            // ===================================================================
+            function shuffleArray(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+            }
+
+            function renderPage(pageNumber, chunkSize) {
+                const start = (pageNumber - 1) * chunkSize;
+                const end = start + chunkSize;
+                const pageData = allSqlStatements.slice(start, end);
+                outputTextarea.value = pageData.join('\n');
+                document.querySelectorAll('.pagination-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                    if (parseInt(btn.dataset.page) === pageNumber) btn.classList.add('active');
+                });
+            }
+
+            generateBtn.addEventListener('click', () => {
+                const numRows = parseInt(numRowsInput.value, 10);
+                const chunkSize = parseInt(chunkSizeInput.value, 10);
+                const minId = parseInt(minPendudukIdInput.value, 10);
+                const maxId = parseInt(maxPendudukIdInput.value, 10);
+
+                if (isNaN(numRows) || numRows <= 0 || isNaN(chunkSize) || chunkSize <= 0 || isNaN(minId) || isNaN(maxId) || minId > maxId) {
+                    alert('Masukkan jumlah data dan parameter lain yang valid.');
+                    return;
+                }
+
+                allSqlStatements = [];
+                const startDate = new Date(2023, 0, 1);
+                const endDate = new Date();
+
+                let statuses = [];
+                const numDitolak = Math.floor(numRows * 0.3); // Target 30% ditolak
+                for (let i = 0; i < numRows; i++) {
+                    statuses.push(i < numDitolak ? 'Ditolak' : 'Selesai');
+                }
+                shuffleArray(statuses); // Acak array status dengan metode yang benar
+
+                for (let i = 1; i <= numRows; i++) {
+                    const permohonanId = i;
+                    const pendudukId = getRandomInt(minId, maxId); 
+                    const jenisSurat = getRandomElement(jenisSuratOptions);
+                    
+                    const status = statuses[i-1];
+
+                    const noTelepon = `0812${String(getRandomInt(10000000, 99999999))}`;
+                    const catatanPemohon = Math.random() < 0.2 ? getRandomElement(keperluanOptions) : '';
+                    const catatanAdmin = status === 'Ditolak' ? getRandomElement(alasanDitolak) : '';
+                    const tglPermohonan = randomDate(startDate, endDate);
+                    const tglSelesai = status === 'Selesai' ? new Date(tglPermohonan.getTime() + getRandomInt(1, 7) * 24 * 60 * 60 * 1000) : null;
+                    const bulanRomawi = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+                    const nomorSurat = status === 'Selesai' ? `470/${permohonanId}/${bulanRomawi[tglPermohonan.getMonth()]}/${tglPermohonan.getFullYear()}` : '';
+                    const kodePelacakan = `${jenisSurat.kode}-${tglPermohonan.getFullYear()}${(tglPermohonan.getMonth() + 1).toString().padStart(2, '0')}-${String(permohonanId).padStart(4, '0')}`;
+
+                    let additionalData = {};
+                    if(jenisSurat.custom_fields.length > 0) {
+                        jenisSurat.custom_fields.forEach(field => {
+                            additionalData[field.name] = `Data dummy untuk ${field.label}`;
+                        });
+                    }
+                    const additionalDataJsonString = JSON.stringify(additionalData);
+                    const formatDate = (date) => date ? `'${date.toISOString().slice(0, 19).replace('T', ' ')}'` : 'NULL';
+
+                    // PENJELASAN: Kolom di INSERT INTO adalah 'penduduk_id'. Ini adalah nama foreign key di tabel 'permohonan_surats'
+                    // yang merujuk ke kolom 'id' di tabel 'penduduks'. Nilai pendudukId (misal: 5) yang kita generate akan dimasukkan ke sini.
+                    const sql = `INSERT INTO permohonan_surat (permohonan_id, penduduk_id, jenis_surat_id, status, no_telepon, catatan, catatan_admin, tanggal_permohonan, tanggal_selesai, nomor_surat, kode_pelacakan, additional_data, created_at, updated_at) VALUES (${permohonanId}, ${pendudukId}, ${jenisSurat.id}, '${status}', '${noTelepon}', '${escapeSql(catatanPemohon)}', '${escapeSql(catatanAdmin)}', ${formatDate(tglPermohonan)}, ${formatDate(tglSelesai)}, '${nomorSurat}', '${kodePelacakan}', '${escapeSql(additionalDataJsonString)}', ${formatDate(tglPermohonan)}, ${formatDate(tglPermohonan)});`;
+                    allSqlStatements.push(sql);
+                }
+
+                paginationControls.innerHTML = '';
+                const pageCount = Math.ceil(numRows / chunkSize);
+                for (let i = 1; i <= pageCount; i++) {
+                    const pageBtn = document.createElement('button');
+                    pageBtn.textContent = i;
+                    pageBtn.dataset.page = i;
+                    pageBtn.className = 'pagination-btn px-3 py-1 border rounded-md bg-white hover:bg-gray-200';
+                    pageBtn.addEventListener('click', () => renderPage(i, chunkSize));
+                    paginationControls.appendChild(pageBtn);
+                }
+
+                renderPage(1, chunkSize);
+                copyBtn.disabled = false;
+                copyMessage.textContent = `${numRows} baris data berhasil dibuat. Salin dan jalankan di tab SQL phpMyAdmin.`;
+            });
+
+            copyBtn.addEventListener('click', () => {
+                if (!outputTextarea.value) return;
+                navigator.clipboard.writeText(outputTextarea.value).then(() => {
+                    copyMessage.textContent = 'Berhasil menyalin perintah SQL halaman ini!';
+                    setTimeout(() => { copyMessage.textContent = '' }, 3000);
+                });
+            });
+        });
+    </script>
+</body>
+</html>
